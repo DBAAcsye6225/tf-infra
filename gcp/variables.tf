@@ -22,3 +22,15 @@ variable "subnet_cidrs" {
     "10.1.4.0/24", "10.1.5.0/24", "10.1.6.0/24"  # Private
   ]
 }
+
+variable "machine_type" {
+  description = "GCP machine type"
+  type        = string
+  default     = "e2-medium"
+}
+
+variable "instance_zone" {
+  description = "Zone for the compute instance"
+  type        = string
+  default     = "us-east1-b"
+}
