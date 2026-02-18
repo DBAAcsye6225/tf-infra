@@ -51,3 +51,53 @@ resource "google_compute_firewall" "deny_all" {
 
   source_ranges = ["0.0.0.0/0"]
 }
+
+# 6. Data source to find the latest custom image
+data "google_compute_image" "webapp" {
+  family  = "csye6225-webapp"
+  project = var.project_id
+}
+
+# 7. Compute Engine Instance
+resource "google_compute_instance" "webapp" {
+  name         = "${var.vpc_name}-webapp-instance"
+  machine_type = var.machine_type
+  zone         = var.instance_zone
+
+  # Boot disk configuration
+  boot_disk {
+    auto_delete = true
+
+    initialize_params {
+      image = data.google_compute_image.webapp.self_link
+      size  = 25
+      type  = "pd-balanced"
+    }
+  }
+
+  # Network configuration
+  network_interface {
+    subnetwork = google_compute_subnetwork.subnets[0].id
+
+    # Assign external IP
+    access_config {
+      // Ephemeral public IP
+    }
+  }
+
+  # Network tags for firewall rules
+  tags = ["webapp"]
+
+  # Metadata (optional)
+  metadata = {
+    enable-oslogin = "FALSE"
+  }
+
+  # Disable deletion protection
+  deletion_protection = false
+
+  # Service account (use default compute service account or create dedicated one)
+  service_account {
+    scopes = ["cloud-platform"]
+  }
+}
