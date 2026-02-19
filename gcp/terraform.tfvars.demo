@@ -1,0 +1,4 @@
+project_id   = "weihong-demo"
+region       = "us-east1"
+vpc_name     = "csye6225-vpc-demo"
+subnet_cidrs = ["10.2.1.0/24", "10.2.2.0/24", "10.2.3.0/24", "10.2.4.0/24", "10.2.5.0/24", "10.2.6.0/24"]
