@@ -55,7 +55,7 @@ resource "google_compute_firewall" "deny_all" {
 # 6. Data source to find the latest custom image
 data "google_compute_image" "webapp" {
   family  = "csye6225-webapp"
-  project = var.project_id
+  project = "weihong-dev" # Dev project - where images are built
 }
 
 # 7. Compute Engine Instance

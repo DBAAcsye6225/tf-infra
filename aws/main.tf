@@ -85,7 +85,7 @@ resource "aws_route_table_association" "private_assoc" {
 # 9. Data source to find the latest custom AMI
 data "aws_ami" "webapp" {
   most_recent = true
-  owners      = ["self"] # AMIs owned by your account
+  owners      = ["163285046203"] # Dev account - where images are built
 
   filter {
     name   = "name"
@@ -170,6 +170,13 @@ resource "aws_instance" "webapp" {
 
   # Disable termination protection
   disable_api_termination = false
+
+  # Allow IMDSv1 for now (testing)
+  metadata_options {
+    http_endpoint               = "enabled"
+    http_tokens                 = "required"
+    http_put_response_hop_limit = 1
+  }
 
   # Root volume configuration
   root_block_device {
