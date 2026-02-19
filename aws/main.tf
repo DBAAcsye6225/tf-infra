@@ -21,7 +21,7 @@ resource "aws_internet_gateway" "gw" {
 # 3. Create Public Subnets (3)
 resource "aws_subnet" "public" {
   count                   = length(var.public_subnet_cidrs)
-  vpc_id                  = aws_vpc.main.id
+  vpc_id                  = aws_vpc
   cidr_block              = var.public_subnet_cidrs[count.index]
   availability_zone       = var.public_subnet_az[count.index]
   map_public_ip_on_launch = true
