@@ -48,3 +48,15 @@ variable "instance_type" {
   type        = string
   default     = "t2.micro"
 }
+
+variable "db_password" {
+  description = "Master password for RDS instance"
+  type        = string
+  sensitive   = true
+}
+
+variable "db_instance_class" {
+  description = "RDS instance class"
+  type        = string
+  default     = "db.t3.micro"
+}
