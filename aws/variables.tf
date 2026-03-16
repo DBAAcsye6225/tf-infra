@@ -60,3 +60,18 @@ variable "db_instance_class" {
   type        = string
   default     = "db.t3.micro"
 }
+
+variable "domain_name" {
+  description = "Root domain name (e.g., example.com)"
+  type        = string
+}
+
+variable "subdomain_prefix" {
+  description = "Subdomain prefix for this environment (e.g., dev or demo)"
+  type        = string
+}
+
+variable "route53_zone_id" {
+  description = "Route 53 hosted zone ID for the subdomain"
+  type        = string
+}
