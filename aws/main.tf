@@ -179,7 +179,7 @@ resource "aws_instance" "webapp" {
   metadata_options {
     http_endpoint               = "enabled"
     http_tokens                 = "required"
-    http_put_response_hop_limit = 1
+    http_put_response_hop_limit = 2
   }
 
   # Root volume configuration
@@ -198,7 +198,12 @@ resource "aws_instance" "webapp" {
     echo "S3_BUCKET_NAME=${aws_s3_bucket.webapp.bucket}" >> /etc/environment
     echo "AWS_REGION=${var.aws_region}" >> /etc/environment
     source /etc/environment
-    systemctl restart webapp
+    sudo /opt/aws/amazon-cloudwatch-agent/bin/amazon-cloudwatch-agent-ctl \
+      -a fetch-config \
+      -m ec2 \
+      -c file:/opt/aws/amazon-cloudwatch-agent/etc/cloudwatch-agent-config.json \
+      -s
+    sudo systemctl restart webapp
   EOF
   )
 
@@ -207,6 +212,15 @@ resource "aws_instance" "webapp" {
   tags = {
     Name = "${var.vpc_name}-webapp-instance"
   }
+}
+
+# Route 53 A record for app endpoint
+resource "aws_route53_record" "app" {
+  zone_id = var.route53_zone_id
+  name    = "${var.subdomain_prefix}.${var.domain_name}"
+  type    = "A"
+  ttl     = 300
+  records = [aws_instance.webapp.public_ip]
 }
 
 # ============================================================
@@ -385,6 +399,12 @@ resource "aws_iam_policy" "s3_access" {
 resource "aws_iam_role_policy_attachment" "s3_access" {
   role       = aws_iam_role.ec2_role.name
   policy_arn = aws_iam_policy.s3_access.arn
+}
+
+# Attach AWS managed CloudWatch agent policy to EC2 role
+resource "aws_iam_role_policy_attachment" "cloudwatch_agent_policy" {
+  role       = aws_iam_role.ec2_role.name
+  policy_arn = "arn:aws:iam::aws:policy/CloudWatchAgentServerPolicy"
 }
 
 # Instance Profile

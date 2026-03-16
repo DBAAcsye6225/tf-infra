@@ -47,3 +47,8 @@ output "iam_role_name" {
   description = "IAM role name for EC2"
   value       = aws_iam_role.ec2_role.name
 }
+
+output "app_domain_name" {
+  description = "The domain name of the application"
+  value       = aws_route53_record.app.name
+}

@@ -52,7 +52,62 @@ resource "google_compute_firewall" "deny_all" {
   source_ranges = ["0.0.0.0/0"]
 }
 
-# 6. Data source to find the latest custom image
+# ============================================================
+# Cloud SQL Resources
+# ============================================================
+
+# 6a. Enable private services access for Cloud SQL
+resource "google_compute_global_address" "private_ip_range" {
+  name          = "${var.vpc_name}-private-ip-range"
+  purpose       = "VPC_PEERING"
+  address_type  = "INTERNAL"
+  prefix_length = 16
+  network       = google_compute_network.vpc.id
+}
+
+resource "google_service_networking_connection" "private_vpc_connection" {
+  network                 = google_compute_network.vpc.id
+  service                 = "servicenetworking.googleapis.com"
+  reserved_peering_ranges = [google_compute_global_address.private_ip_range.name]
+}
+
+# 6b. Cloud SQL MySQL Instance
+resource "google_sql_database_instance" "webapp" {
+  name             = "csye6225-db"
+  database_version = "MYSQL_8_0"
+  region           = var.region
+
+  depends_on = [google_service_networking_connection.private_vpc_connection]
+
+  deletion_protection = false
+
+  settings {
+    tier              = var.db_tier
+    availability_type = "ZONAL"
+    disk_size         = 20
+    disk_type         = "PD_SSD"
+
+    ip_configuration {
+      ipv4_enabled    = false
+      private_network = google_compute_network.vpc.id
+    }
+  }
+}
+
+# 6c. Cloud SQL Database
+resource "google_sql_database" "webapp" {
+  name     = "csye6225"
+  instance = google_sql_database_instance.webapp.name
+}
+
+# 6d. Cloud SQL User
+resource "google_sql_user" "webapp" {
+  name     = "csye6225"
+  instance = google_sql_database_instance.webapp.name
+  password = var.db_password
+}
+
+# 6e. Data source to find the latest custom image
 data "google_compute_image" "webapp" {
   family  = "csye6225-webapp"
   project = "weihong-dev" # Dev project - where images are built
@@ -88,9 +143,17 @@ resource "google_compute_instance" "webapp" {
   # Network tags for firewall rules
   tags = ["webapp"]
 
-  # Metadata (optional)
+  # Startup script to inject database credentials
   metadata = {
     enable-oslogin = "FALSE"
+    startup-script = <<-EOF
+      #!/bin/bash
+      echo "SPRING_DATASOURCE_URL=jdbc:mysql://${google_sql_database_instance.webapp.private_ip_address}:3306/csye6225?useSSL=false&serverTimezone=UTC&allowPublicKeyRetrieval=true" >> /etc/environment
+      echo "SPRING_DATASOURCE_USERNAME=csye6225" >> /etc/environment
+      echo "SPRING_DATASOURCE_PASSWORD=${var.db_password}" >> /etc/environment
+      source /etc/environment
+      systemctl restart webapp
+    EOF
   }
 
   # Disable deletion protection

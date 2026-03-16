@@ -34,3 +34,15 @@ variable "instance_zone" {
   type        = string
   default     = "us-east1-b"
 }
+
+variable "db_password" {
+  description = "Password for the Cloud SQL database"
+  type        = string
+  sensitive   = true
+}
+
+variable "db_tier" {
+  description = "Cloud SQL machine tier"
+  type        = string
+  default     = "db-f1-micro"
+}
