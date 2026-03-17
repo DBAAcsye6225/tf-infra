@@ -189,20 +189,82 @@ resource "aws_instance" "webapp" {
     delete_on_termination = true
   }
 
-  # User data to inject database and S3 config
+  # User data to inject database, S3 config, and CloudWatch Agent configuration
   user_data = base64encode(<<-EOF
     #!/bin/bash
+    set -e
+
+    # Use IMDSv2 because instance metadata tokens are required.
+    TOKEN=$(curl -sS -X PUT "http://169.254.169.254/latest/api/token" -H "X-aws-ec2-metadata-token-ttl-seconds: 21600" || true)
+    INSTANCE_ID=$(curl -sS -H "X-aws-ec2-metadata-token: $TOKEN" http://169.254.169.254/latest/meta-data/instance-id || true)
+    if [ -z "$INSTANCE_ID" ]; then
+      INSTANCE_ID="unknown-instance"
+    fi
+    
+    # Configure application environment variables
     echo "SPRING_DATASOURCE_URL=jdbc:mysql://${aws_db_instance.webapp.address}:3306/csye6225" >> /etc/environment
     echo "SPRING_DATASOURCE_USERNAME=csye6225" >> /etc/environment
     echo "SPRING_DATASOURCE_PASSWORD=${var.db_password}" >> /etc/environment
     echo "S3_BUCKET_NAME=${aws_s3_bucket.webapp.bucket}" >> /etc/environment
     echo "AWS_REGION=${var.aws_region}" >> /etc/environment
+    echo "APP_LOG_PATH=/var/log/webapp/webapp.log" >> /etc/environment
     source /etc/environment
+    
+    # Create CloudWatch Agent configuration directory
+    sudo mkdir -p /opt/aws/amazon-cloudwatch-agent/etc
+    
+    # Create CloudWatch Agent configuration file with instance ID
+    sudo tee /opt/aws/amazon-cloudwatch-agent/etc/cloudwatch-agent-config.json > /dev/null <<CONFIG
+    {
+      "logs": {
+        "logs_collected": {
+          "files": {
+            "collect_list": [
+              {
+                "file_path": "/var/log/webapp/webapp.log",
+                "log_group_name": "/aws/ec2/webapp",
+                "log_stream_name": "$INSTANCE_ID",
+                "retention_in_days": 7
+              }
+            ]
+          }
+        }
+      },
+      "metrics": {
+        "namespace": "CSYE6225",
+        "metrics_collected": {
+          "statsd": {
+            "service_address": "127.0.0.1:8125",
+            "metrics_collection_interval": 60,
+            "metrics_aggregation_interval": 60
+          }
+        }
+      }
+    }
+    CONFIG
+    
+    # Ensure webapp log directory exists
+    sudo mkdir -p /var/log/webapp
+    sudo chown csye6225:csye6225 /var/log/webapp
+
+    # Install CloudWatch agent if it is not already present on the AMI.
+    if [ ! -x /opt/aws/amazon-cloudwatch-agent/bin/amazon-cloudwatch-agent-ctl ]; then
+      wget -q https://amazoncloudwatch-agent.s3.amazonaws.com/ubuntu/amd64/latest/amazon-cloudwatch-agent.deb -O /tmp/amazon-cloudwatch-agent.deb
+      sudo dpkg -i -E /tmp/amazon-cloudwatch-agent.deb || sudo apt-get -y -f install
+      rm -f /tmp/amazon-cloudwatch-agent.deb
+    fi
+    
+    # Start CloudWatch Agent
     sudo /opt/aws/amazon-cloudwatch-agent/bin/amazon-cloudwatch-agent-ctl \
       -a fetch-config \
       -m ec2 \
       -c file:/opt/aws/amazon-cloudwatch-agent/etc/cloudwatch-agent-config.json \
       -s
+    
+    # Wait for RDS to be ready
+    sleep 30
+    
+    # Restart webapp service
     sudo systemctl restart webapp
   EOF
   )
@@ -220,6 +282,7 @@ resource "aws_route53_record" "app" {
   name    = "${var.subdomain_prefix}.${var.domain_name}"
   type    = "A"
   ttl     = 300
+  allow_overwrite = true
   records = [aws_instance.webapp.public_ip]
 }
 
