@@ -13,14 +13,24 @@ output "private_subnet_ids" {
   value       = aws_subnet.private[*].id
 }
 
-output "instance_id" {
-  description = "ID of the EC2 instance"
-  value       = aws_instance.webapp.id
+output "alb_dns_name" {
+  description = "DNS name of the Application Load Balancer"
+  value       = aws_lb.webapp.dns_name
 }
 
-output "instance_public_ip" {
-  description = "Public IP of the EC2 instance"
-  value       = aws_instance.webapp.public_ip
+output "alb_zone_id" {
+  description = "Zone ID of the Application Load Balancer"
+  value       = aws_lb.webapp.zone_id
+}
+
+output "asg_name" {
+  description = "Name of the Auto Scaling Group"
+  value       = aws_autoscaling_group.webapp.name
+}
+
+output "target_group_arn" {
+  description = "ARN of the target group"
+  value       = aws_lb_target_group.webapp.arn
 }
 
 output "application_security_group_id" {

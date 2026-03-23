@@ -49,6 +49,59 @@ variable "instance_type" {
   default     = "t2.micro"
 }
 
+variable "key_name" {
+  description = "SSH key pair name"
+  type        = string
+}
+
+variable "app_port" {
+  description = "Port the application listens on"
+  type        = number
+  default     = 8080
+}
+
+variable "health_check_path" {
+  description = "Health check path for the target group"
+  type        = string
+  default     = "/healthz"
+}
+
+variable "asg_min_size" {
+  description = "Minimum number of instances in ASG"
+  type        = number
+  default     = 3
+}
+
+variable "asg_max_size" {
+  description = "Maximum number of instances in ASG"
+  type        = number
+  default     = 5
+}
+
+variable "asg_desired_capacity" {
+  description = "Desired number of instances in ASG"
+  type        = number
+  default     = 3
+}
+
+variable "asg_cooldown" {
+  description = "Cooldown period in seconds"
+  type        = number
+  default     = 60
+}
+
+variable "scale_up_cpu_threshold" {
+  description = "CPU threshold to trigger scale up"
+  type        = number
+  default     = 5
+}
+
+variable "scale_down_cpu_threshold" {
+  description = "CPU threshold to trigger scale down"
+  type        = number
+  default     = 3
+}
+
 variable "db_password" {
   description = "Master password for RDS instance"
   type        = string
