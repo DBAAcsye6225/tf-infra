@@ -98,7 +98,42 @@ data "aws_ami" "webapp" {
   }
 }
 
-# 10. Application Security Group
+# 10. Load Balancer Security Group
+resource "aws_security_group" "load_balancer" {
+  name        = "${var.vpc_name}-lb-sg"
+  description = "Security group for Application Load Balancer"
+  vpc_id      = aws_vpc.main.id
+
+  ingress {
+    from_port   = 80
+    to_port     = 80
+    protocol    = "tcp"
+    cidr_blocks = ["0.0.0.0/0"]
+    description = "Allow HTTP from anywhere"
+  }
+
+  ingress {
+    from_port   = 443
+    to_port     = 443
+    protocol    = "tcp"
+    cidr_blocks = ["0.0.0.0/0"]
+    description = "Allow HTTPS from anywhere"
+  }
+
+  egress {
+    from_port   = 0
+    to_port     = 0
+    protocol    = "-1"
+    cidr_blocks = ["0.0.0.0/0"]
+    description = "Allow all outbound"
+  }
+
+  tags = {
+    Name = "${var.vpc_name}-lb-sg"
+  }
+}
+
+# 11. Application Security Group
 resource "aws_security_group" "application" {
   name        = "${var.vpc_name}-application-sg"
   description = "Security group for web application instances"
@@ -113,31 +148,13 @@ resource "aws_security_group" "application" {
     description = "Allow SSH"
   }
 
-  # Allow HTTP
+  # Allow app traffic ONLY from Load Balancer SG
   ingress {
-    from_port   = 80
-    to_port     = 80
-    protocol    = "tcp"
-    cidr_blocks = ["0.0.0.0/0"]
-    description = "Allow HTTP"
-  }
-
-  # Allow HTTPS
-  ingress {
-    from_port   = 443
-    to_port     = 443
-    protocol    = "tcp"
-    cidr_blocks = ["0.0.0.0/0"]
-    description = "Allow HTTPS"
-  }
-
-  # Allow application port (8080)
-  ingress {
-    from_port   = 8080
-    to_port     = 8080
-    protocol    = "tcp"
-    cidr_blocks = ["0.0.0.0/0"]
-    description = "Allow application traffic"
+    from_port       = var.app_port
+    to_port         = var.app_port
+    protocol        = "tcp"
+    security_groups = [aws_security_group.load_balancer.id]
+    description     = "Allow app traffic from Load Balancer only"
   }
 
   # Allow all outbound traffic
@@ -154,26 +171,70 @@ resource "aws_security_group" "application" {
   }
 }
 
-# 11. EC2 Instance
-resource "aws_instance" "webapp" {
-  ami           = data.aws_ami.webapp.id
+# 12. Application Load Balancer
+resource "aws_lb" "webapp" {
+  name               = "${var.vpc_name}-alb"
+  internal           = false
+  load_balancer_type = "application"
+  security_groups    = [aws_security_group.load_balancer.id]
+  subnets            = aws_subnet.public[*].id
+
+  tags = {
+    Name = "${var.vpc_name}-alb"
+  }
+}
+
+# 13. Target Group
+resource "aws_lb_target_group" "webapp" {
+  name     = "${var.vpc_name}-tg"
+  port     = var.app_port
+  protocol = "HTTP"
+  vpc_id   = aws_vpc.main.id
+
+  health_check {
+    enabled             = true
+    path                = var.health_check_path
+    port                = "traffic-port"
+    protocol            = "HTTP"
+    healthy_threshold   = 3
+    unhealthy_threshold = 3
+    timeout             = 5
+    interval            = 30
+    matcher             = "200"
+  }
+
+  tags = {
+    Name = "${var.vpc_name}-tg"
+  }
+}
+
+# 14. Listener on port 80
+resource "aws_lb_listener" "http" {
+  load_balancer_arn = aws_lb.webapp.arn
+  port              = 80
+  protocol          = "HTTP"
+
+  default_action {
+    type             = "forward"
+    target_group_arn = aws_lb_target_group.webapp.arn
+  }
+}
+
+# 15. Launch Template
+resource "aws_launch_template" "webapp" {
+  name          = "csye6225_asg"
+  image_id      = data.aws_ami.webapp.id
   instance_type = var.instance_type
-  key_name      = "aws-demo" # SSH key for debugging access
+  key_name      = var.key_name
 
-  # Launch in first public subnet
-  subnet_id = aws_subnet.public[0].id
+  iam_instance_profile {
+    name = aws_iam_instance_profile.ec2_profile.name
+  }
 
-  # Attach security group
-  vpc_security_group_ids = [aws_security_group.application.id]
-
-  # IAM Instance Profile for S3 access
-  iam_instance_profile = aws_iam_instance_profile.ec2_profile.name
-
-  # Disable detailed monitoring (additional cost)
-  monitoring = false
-
-  # Disable termination protection
-  disable_api_termination = false
+  network_interfaces {
+    associate_public_ip_address = true
+    security_groups             = [aws_security_group.application.id]
+  }
 
   # Allow IMDSv1 for now (testing)
   metadata_options {
@@ -182,35 +243,189 @@ resource "aws_instance" "webapp" {
     http_put_response_hop_limit = 2
   }
 
-  # Root volume configuration
-  root_block_device {
-    volume_type           = "gp2"
-    volume_size           = 25
-    delete_on_termination = true
+  block_device_mappings {
+    device_name = "/dev/sda1"
+
+    ebs {
+      volume_size           = 25
+      volume_type           = "gp2"
+      delete_on_termination = true
+    }
   }
 
-  # User data to inject database and S3 config
+  # User data to inject database, S3 config, and CloudWatch Agent configuration
   user_data = base64encode(<<-EOF
     #!/bin/bash
+    set -e
+
+    # Use IMDSv2 because instance metadata tokens are required.
+    TOKEN=$(curl -sS -X PUT "http://169.254.169.254/latest/api/token" -H "X-aws-ec2-metadata-token-ttl-seconds: 21600" || true)
+    INSTANCE_ID=$(curl -sS -H "X-aws-ec2-metadata-token: $TOKEN" http://169.254.169.254/latest/meta-data/instance-id || true)
+    if [ -z "$INSTANCE_ID" ]; then
+      INSTANCE_ID="unknown-instance"
+    fi
+
+    # Configure application environment variables
     echo "SPRING_DATASOURCE_URL=jdbc:mysql://${aws_db_instance.webapp.address}:3306/csye6225" >> /etc/environment
     echo "SPRING_DATASOURCE_USERNAME=csye6225" >> /etc/environment
     echo "SPRING_DATASOURCE_PASSWORD=${var.db_password}" >> /etc/environment
     echo "S3_BUCKET_NAME=${aws_s3_bucket.webapp.bucket}" >> /etc/environment
     echo "AWS_REGION=${var.aws_region}" >> /etc/environment
+    echo "APP_LOG_PATH=/var/log/webapp/webapp.log" >> /etc/environment
     source /etc/environment
+
+    # Create CloudWatch Agent configuration directory
+    sudo mkdir -p /opt/aws/amazon-cloudwatch-agent/etc
+
+    # Create CloudWatch Agent configuration file with instance ID
+    sudo tee /opt/aws/amazon-cloudwatch-agent/etc/cloudwatch-agent-config.json > /dev/null <<CONFIG
+    {
+      "logs": {
+        "logs_collected": {
+          "files": {
+            "collect_list": [
+              {
+                "file_path": "/var/log/webapp/webapp.log",
+                "log_group_name": "/aws/ec2/webapp",
+                "log_stream_name": "$INSTANCE_ID",
+                "retention_in_days": 7
+              }
+            ]
+          }
+        }
+      },
+      "metrics": {
+        "namespace": "CSYE6225",
+        "metrics_collected": {
+          "statsd": {
+            "service_address": "127.0.0.1:8125",
+            "metrics_collection_interval": 60,
+            "metrics_aggregation_interval": 60
+          }
+        }
+      }
+    }
+    CONFIG
+
+    # Ensure webapp log directory exists
+    sudo mkdir -p /var/log/webapp
+    sudo chown csye6225:csye6225 /var/log/webapp
+
+    # Install CloudWatch agent if it is not already present on the AMI.
+    if [ ! -x /opt/aws/amazon-cloudwatch-agent/bin/amazon-cloudwatch-agent-ctl ]; then
+      wget -q https://amazoncloudwatch-agent.s3.amazonaws.com/ubuntu/amd64/latest/amazon-cloudwatch-agent.deb -O /tmp/amazon-cloudwatch-agent.deb
+      sudo dpkg -i -E /tmp/amazon-cloudwatch-agent.deb || sudo apt-get -y -f install
+      rm -f /tmp/amazon-cloudwatch-agent.deb
+    fi
+
+    # Start CloudWatch Agent
     sudo /opt/aws/amazon-cloudwatch-agent/bin/amazon-cloudwatch-agent-ctl \
       -a fetch-config \
       -m ec2 \
       -c file:/opt/aws/amazon-cloudwatch-agent/etc/cloudwatch-agent-config.json \
       -s
+
+    # Wait for RDS to be ready
+    sleep 30
+
+    # Restart webapp service
     sudo systemctl restart webapp
   EOF
   )
 
-  depends_on = [aws_db_instance.webapp]
+  tag_specifications {
+    resource_type = "instance"
 
-  tags = {
-    Name = "${var.vpc_name}-webapp-instance"
+    tags = {
+      Name = "${var.vpc_name}-webapp-asg-instance"
+    }
+  }
+
+  depends_on = [aws_db_instance.webapp]
+}
+
+# 16. Auto Scaling Group
+resource "aws_autoscaling_group" "webapp" {
+  name                = "${var.vpc_name}-asg"
+  min_size            = var.asg_min_size
+  max_size            = var.asg_max_size
+  desired_capacity    = var.asg_desired_capacity
+  default_cooldown    = var.asg_cooldown
+  vpc_zone_identifier = aws_subnet.public[*].id
+
+  launch_template {
+    id      = aws_launch_template.webapp.id
+    version = "$Latest"
+  }
+
+  target_group_arns = [aws_lb_target_group.webapp.arn]
+
+  tag {
+    key                 = "Name"
+    value               = "${var.vpc_name}-webapp-asg-instance"
+    propagate_at_launch = true
+  }
+
+  tag {
+    key                 = "AutoScalingGroup"
+    value               = "${var.vpc_name}-asg"
+    propagate_at_launch = true
+  }
+}
+
+# 17. Scale UP policy
+resource "aws_autoscaling_policy" "scale_up" {
+  name                   = "${var.vpc_name}-scale-up"
+  autoscaling_group_name = aws_autoscaling_group.webapp.name
+  adjustment_type        = "ChangeInCapacity"
+  scaling_adjustment     = 1
+  cooldown               = var.asg_cooldown
+  policy_type            = "SimpleScaling"
+}
+
+# 18. Scale DOWN policy
+resource "aws_autoscaling_policy" "scale_down" {
+  name                   = "${var.vpc_name}-scale-down"
+  autoscaling_group_name = aws_autoscaling_group.webapp.name
+  adjustment_type        = "ChangeInCapacity"
+  scaling_adjustment     = -1
+  cooldown               = var.asg_cooldown
+  policy_type            = "SimpleScaling"
+}
+
+# 19. High CPU alarm (> 5%)
+resource "aws_cloudwatch_metric_alarm" "high_cpu" {
+  alarm_name          = "${var.vpc_name}-high-cpu"
+  comparison_operator = "GreaterThanThreshold"
+  evaluation_periods  = 1
+  metric_name         = "CPUUtilization"
+  namespace           = "AWS/EC2"
+  period              = 60
+  statistic           = "Average"
+  threshold           = var.scale_up_cpu_threshold
+  alarm_description   = "Scale up when CPU > ${var.scale_up_cpu_threshold}%"
+  alarm_actions       = [aws_autoscaling_policy.scale_up.arn]
+
+  dimensions = {
+    AutoScalingGroupName = aws_autoscaling_group.webapp.name
+  }
+}
+
+# 20. Low CPU alarm (< 3%)
+resource "aws_cloudwatch_metric_alarm" "low_cpu" {
+  alarm_name          = "${var.vpc_name}-low-cpu"
+  comparison_operator = "LessThanThreshold"
+  evaluation_periods  = 1
+  metric_name         = "CPUUtilization"
+  namespace           = "AWS/EC2"
+  period              = 60
+  statistic           = "Average"
+  threshold           = var.scale_down_cpu_threshold
+  alarm_description   = "Scale down when CPU < ${var.scale_down_cpu_threshold}%"
+  alarm_actions       = [aws_autoscaling_policy.scale_down.arn]
+
+  dimensions = {
+    AutoScalingGroupName = aws_autoscaling_group.webapp.name
   }
 }
 
@@ -219,8 +434,12 @@ resource "aws_route53_record" "app" {
   zone_id = var.route53_zone_id
   name    = "${var.subdomain_prefix}.${var.domain_name}"
   type    = "A"
-  ttl     = 300
-  records = [aws_instance.webapp.public_ip]
+
+  alias {
+    name                   = aws_lb.webapp.dns_name
+    zone_id                = aws_lb.webapp.zone_id
+    evaluate_target_health = true
+  }
 }
 
 # ============================================================
