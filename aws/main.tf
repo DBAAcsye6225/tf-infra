@@ -197,9 +197,9 @@ resource "aws_lb_target_group" "webapp" {
     port                = "traffic-port"
     protocol            = "HTTP"
     healthy_threshold   = 3
-    unhealthy_threshold = 3
-    timeout             = 5
-    interval            = 30
+    unhealthy_threshold = 5
+    timeout             = 10
+    interval            = 60
     matcher             = "200"
   }
 
@@ -272,6 +272,8 @@ resource "aws_launch_template" "webapp" {
     echo "S3_BUCKET_NAME=${aws_s3_bucket.webapp.bucket}" >> /etc/environment
     echo "AWS_REGION=${var.aws_region}" >> /etc/environment
     echo "APP_LOG_PATH=/var/log/webapp/webapp.log" >> /etc/environment
+    echo "SNS_TOPIC_ARN=${aws_sns_topic.user_verification.arn}" >> /etc/environment
+    echo "JAVA_TOOL_OPTIONS=-Xms128m -Xmx384m" >> /etc/environment
     source /etc/environment
 
     # Create CloudWatch Agent configuration directory
@@ -346,12 +348,14 @@ resource "aws_launch_template" "webapp" {
 
 # 16. Auto Scaling Group
 resource "aws_autoscaling_group" "webapp" {
-  name                = "${var.vpc_name}-asg"
-  min_size            = var.asg_min_size
-  max_size            = var.asg_max_size
-  desired_capacity    = var.asg_desired_capacity
-  default_cooldown    = var.asg_cooldown
-  vpc_zone_identifier = aws_subnet.public[*].id
+  name                      = "${var.vpc_name}-asg"
+  min_size                  = 1
+  max_size                  = 1
+  desired_capacity          = 1
+  default_cooldown          = var.asg_cooldown
+  health_check_type         = "ELB"
+  health_check_grace_period = 300
+  vpc_zone_identifier       = aws_subnet.public[*].id
 
   launch_template {
     id      = aws_launch_template.webapp.id
@@ -397,13 +401,13 @@ resource "aws_autoscaling_policy" "scale_down" {
 resource "aws_cloudwatch_metric_alarm" "high_cpu" {
   alarm_name          = "${var.vpc_name}-high-cpu"
   comparison_operator = "GreaterThanThreshold"
-  evaluation_periods  = 1
+  evaluation_periods  = 2
   metric_name         = "CPUUtilization"
   namespace           = "AWS/EC2"
   period              = 60
   statistic           = "Average"
-  threshold           = var.scale_up_cpu_threshold
-  alarm_description   = "Scale up when CPU > ${var.scale_up_cpu_threshold}%"
+  threshold           = 90
+  alarm_description   = "Scale up when CPU > 90% for 2 periods"
   alarm_actions       = [aws_autoscaling_policy.scale_up.arn]
 
   dimensions = {
@@ -626,8 +630,174 @@ resource "aws_iam_role_policy_attachment" "cloudwatch_agent_policy" {
   policy_arn = "arn:aws:iam::aws:policy/CloudWatchAgentServerPolicy"
 }
 
+# Allow EC2 instances to publish user verification messages to SNS
+resource "aws_iam_role_policy" "ec2_sns_publish" {
+  name = "ec2-sns-publish"
+  role = aws_iam_role.ec2_role.id
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Effect   = "Allow"
+        Action   = "sns:Publish"
+        Resource = aws_sns_topic.user_verification.arn
+      }
+    ]
+  })
+}
+
 # Instance Profile
 resource "aws_iam_instance_profile" "ec2_profile" {
   name = "${var.vpc_name}-ec2-profile"
   role = aws_iam_role.ec2_role.name
+}
+
+# ============================================================
+# Assignment 08 Resources
+# ============================================================
+
+resource "aws_dynamodb_table" "email_tracking" {
+  name         = "csye6225-email-tracking"
+  billing_mode = "PAY_PER_REQUEST"
+  hash_key     = "email"
+
+  attribute {
+    name = "email"
+    type = "S"
+  }
+
+  ttl {
+    attribute_name = "ttl"
+    enabled        = true
+  }
+
+  tags = {
+    Name = "${var.vpc_name}-email-tracking"
+  }
+}
+
+resource "aws_sns_topic" "user_verification" {
+  name = "csye6225-user-verification"
+
+  tags = {
+    Name = "${var.vpc_name}-user-verification"
+  }
+}
+
+resource "aws_iam_role" "lambda_exec" {
+  name = "${var.vpc_name}-lambda-exec-role"
+
+  assume_role_policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Effect = "Allow"
+        Principal = {
+          Service = "lambda.amazonaws.com"
+        }
+        Action = "sts:AssumeRole"
+      }
+    ]
+  })
+
+  tags = {
+    Name = "${var.vpc_name}-lambda-exec-role"
+  }
+}
+
+resource "aws_iam_role_policy" "lambda_logs" {
+  name = "lambda-cloudwatch-logs"
+  role = aws_iam_role.lambda_exec.id
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Effect = "Allow"
+        Action = [
+          "logs:CreateLogGroup",
+          "logs:CreateLogStream",
+          "logs:PutLogEvents"
+        ]
+        Resource = "arn:aws:logs:*:*:*"
+      }
+    ]
+  })
+}
+
+resource "aws_iam_role_policy" "lambda_dynamodb" {
+  name = "lambda-dynamodb-email-tracking"
+  role = aws_iam_role.lambda_exec.id
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Effect = "Allow"
+        Action = [
+          "dynamodb:GetItem",
+          "dynamodb:PutItem",
+          "dynamodb:Query"
+        ]
+        Resource = aws_dynamodb_table.email_tracking.arn
+      }
+    ]
+  })
+}
+
+resource "aws_iam_role_policy" "lambda_ses" {
+  name = "lambda-ses-send-email"
+  role = aws_iam_role.lambda_exec.id
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Effect = "Allow"
+        Action = [
+          "ses:SendEmail",
+          "ses:SendRawEmail"
+        ]
+        Resource = "*"
+      }
+    ]
+  })
+}
+
+resource "aws_lambda_function" "email_verification" {
+  filename         = var.lambda_jar_path
+  source_code_hash = filebase64sha256(var.lambda_jar_path)
+  function_name    = "csye6225-email-verification"
+  role             = aws_iam_role.lambda_exec.arn
+  handler          = "com.csye6225.serverless.EmailVerificationHandler::handleRequest"
+  runtime          = "java17"
+  timeout          = 30
+  memory_size      = 256
+
+  environment {
+    variables = {
+      DYNAMODB_TABLE_NAME = aws_dynamodb_table.email_tracking.name
+      SES_SENDER_EMAIL    = "noreply@demo.dbaa.me"
+      DOMAIN_NAME         = "${var.subdomain_prefix}.${var.domain_name}"
+    }
+  }
+
+  tags = {
+    Name = "${var.vpc_name}-email-verification"
+  }
+}
+
+resource "aws_sns_topic_subscription" "lambda_sub" {
+  topic_arn = aws_sns_topic.user_verification.arn
+  protocol  = "lambda"
+  endpoint  = aws_lambda_function.email_verification.arn
+}
+
+resource "aws_lambda_permission" "sns_invoke" {
+  statement_id  = "AllowSNSInvoke"
+  action        = "lambda:InvokeFunction"
+  function_name = aws_lambda_function.email_verification.function_name
+  principal     = "sns.amazonaws.com"
+  source_arn    = aws_sns_topic.user_verification.arn
 }
