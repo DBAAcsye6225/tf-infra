@@ -62,3 +62,15 @@ output "app_domain_name" {
   description = "The domain name of the application"
   value       = aws_route53_record.app.name
 }
+
+output "sns_topic_arn" {
+  value = aws_sns_topic.user_verification.arn
+}
+
+output "dynamodb_table_name" {
+  value = aws_dynamodb_table.email_tracking.name
+}
+
+output "lambda_function_name" {
+  value = aws_lambda_function.email_verification.function_name
+}
