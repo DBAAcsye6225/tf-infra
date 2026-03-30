@@ -27,7 +27,13 @@ jobs:
       - name: Terraform Init
         working-directory: ./${{ matrix.terraform_dir }}
         run: terraform init -backend=false
+
+      - name: Create dummy Lambda JAR for validation
+        if: matrix.terraform_dir == 'aws'
+        run: mkdir -p "${GITHUB_WORKSPACE}/.ci" && touch "${GITHUB_WORKSPACE}/.ci/serverless-1.0-SNAPSHOT.jar"
       
       - name: Terraform Validate
         working-directory: ./${{ matrix.terraform_dir }}
         run: terraform validate
+        env:
+          TF_VAR_lambda_jar_path: ${{ matrix.terraform_dir == 'aws' && format('{0}/.ci/serverless-1.0-SNAPSHOT.jar', github.workspace) || '' }}

@@ -766,8 +766,8 @@ resource "aws_iam_role_policy" "lambda_ses" {
 }
 
 resource "aws_lambda_function" "email_verification" {
-  filename         = "/home/dbaa/serverless/target/serverless-1.0-SNAPSHOT.jar"
-  source_code_hash = filebase64sha256("/home/dbaa/serverless/target/serverless-1.0-SNAPSHOT.jar")
+  filename         = var.lambda_jar_path
+  source_code_hash = filebase64sha256(var.lambda_jar_path)
   function_name    = "csye6225-email-verification"
   role             = aws_iam_role.lambda_exec.arn
   handler          = "com.csye6225.serverless.EmailVerificationHandler::handleRequest"

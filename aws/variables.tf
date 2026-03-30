@@ -128,3 +128,9 @@ variable "route53_zone_id" {
   description = "Route 53 hosted zone ID for the subdomain"
   type        = string
 }
+
+variable "lambda_jar_path" {
+  description = "Path to Lambda JAR file"
+  type        = string
+  default     = "/home/dbaa/serverless/target/serverless-1.0-SNAPSHOT.jar"
+}
