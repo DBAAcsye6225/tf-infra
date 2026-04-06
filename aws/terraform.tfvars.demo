@@ -9,3 +9,4 @@ private_subnet_cidrs = ["10.1.4.0/24", "10.1.5.0/24", "10.1.6.0/24"]
 domain_name      = "dbaa.me"
 subdomain_prefix = "demo"
 route53_zone_id  = "Z0657866IR86CN02DAS0"
+certificate_arn  = "arn:aws:acm:us-east-1:506160144092:certificate/e69c95a1-6cd1-4096-a58c-5c2114871523"

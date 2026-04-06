@@ -1,0 +1,23 @@
+------------------------------------------------------------------------------------------------------------------------------------------------------------
+|                                                                     DescribeInstances                                                                    |
++---------------------+----------------------------------------------------------------------------+-------------+-----------------------------------------+
+|  [1m[34mi-016abb11a68ac948c[0m|  [1m[34mNone[0m                                                                      |  [1m[34mterminated[0m |  [1m[34mcsye6225-vpc-demo-webapp-asg-instance[0m  |
+|  [1m[34mi-0049c6a086f56dc4d[0m|  [1m[34marn:aws:iam::506160144092:instance-profile/csye6225-vpc-demo-ec2-profile[0m  |  [1m[34mrunning[0m    |  [1m[34mcsye6225-vpc-demo-webapp-asg-instance[0m  |
+|  [1m[34mi-0ec787988706e9375[0m|  [1m[34mNone[0m                                                                      |  [1m[34mterminated[0m |  [1m[34mcsye6225-vpc-demo-webapp-asg-instance[0m  |
+|  [1m[34mi-0a50231c14cb3beb4[0m|  [1m[34mNone[0m                                                                      |  [1m[34mterminated[0m |  [1m[34mcsye6225-vpc-demo-webapp-asg-instance[0m  |
+|  [1m[34mi-0f7377e8eafbfcb75[0m|  [1m[34marn:aws:iam::506160144092:instance-profile/csye6225-vpc-demo-ec2-profile[0m  |  [1m[34mrunning[0m    |  [1m[34mcsye6225-vpc-demo-webapp-asg-instance[0m  |
+|  [1m[34mi-080d0cf790e503602[0m|  [1m[34mNone[0m                                                                      |  [1m[34mterminated[0m |  [1m[34mcsye6225-vpc-demo-webapp-asg-instance[0m  |
+|  [1m[34mi-0d00331878820a71f[0m|  [1m[34mNone[0m                                                                      |  [1m[34mterminated[0m |  [1m[34mcsye6225-vpc-demo-webapp-asg-instance[0m  |
+|  [1m[34mi-0aa6b2a164bdbfaa8[0m|  [1m[34marn:aws:iam::506160144092:instance-profile/csye6225-vpc-demo-ec2-profile[0m  |  [1m[34mrunning[0m    |  [1m[34mcsye6225-vpc-demo-webapp-asg-instance[0m  |
+|  [1m[34mi-0d937123e8994dbd2[0m|  [1m[34mNone[0m                                                                      |  [1m[34mterminated[0m |  [1m[34mcsye6225-vpc-demo-webapp-asg-instance[0m  |
+|  [1m[34mi-05f559a75e6e6b5b8[0m|  [1m[34mNone[0m                                                                      |  [1m[34mterminated[0m |  [1m[34mcsye6225-vpc-demo-webapp-asg-instance[0m  |
+|  [1m[34mi-0881b4fc116b58fac[0m|  [1m[34mNone[0m                                                                      |  [1m[34mterminated[0m |  [1m[34mcsye6225-vpc-demo-webapp-asg-instance[0m  |
+|  [1m[34mi-06871f4b0c7571936[0m|  [1m[34mNone[0m                                                                      |  [1m[34mterminated[0m |  [1m[34mcsye6225-vpc-demo-webapp-asg-instance[0m  |
+|  [1m[34mi-07eb23e8686614ce9[0m|  [1m[34mNone[0m                                                                      |  [1m[34mterminated[0m |  [1m[34mcsye6225-vpc-demo-webapp-asg-instance[0m  |
+|  [1m[34mi-06b94c12467d3a42d[0m|  [1m[34mNone[0m                                                                      |  [1m[34mterminated[0m |  [1m[34mcsye6225-vpc-demo-webapp-asg-instance[0m  |
+|  [1m[34mi-05f9fd77f70e318b6[0m|  [1m[34marn:aws:iam::506160144092:instance-profile/csye6225-vpc-demo-ec2-profile[0m  |  [1m[34mrunning[0m    |  [1m[34mcsye6225-vpc-demo-webapp-asg-instance[0m  |
+|  [1m[34mi-08badbf17e595fcc8[0m|  [1m[34marn:aws:iam::506160144092:instance-profile/csye6225-vpc-demo-ec2-profile[0m  |  [1m[34mrunning[0m    |  [1m[34mcsye6225-vpc-demo-webapp-asg-instance[0m  |
+|  [1m[34mi-084e30e2903a88029[0m|  [1m[34marn:aws:iam::506160144092:instance-profile/csye6225-vpc-demo-ec2-profile[0m  |  [1m[34mrunning[0m    |  [1m[34mcsye6225-vpc-demo-webapp-asg-instance[0m  |
+|  [1m[34mi-0f3a4958161238806[0m|  [1m[34mNone[0m                                                                      |  [1m[34mterminated[0m |  [1m[34mcsye6225-vpc-demo-webapp-asg-instance[0m  |
+|  [1m[34mi-0a764cdf7c9fdd1c6[0m|  [1m[34mNone[0m                                                                      |  [1m[34mterminated[0m |  [1m[34mcsye6225-vpc-demo-webapp-asg-instance[0m  |
++---------------------+----------------------------------------------------------------------------+-------------+-----------------------------------------+
