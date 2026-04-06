@@ -28,6 +28,11 @@ output "asg_name" {
   value       = aws_autoscaling_group.webapp.name
 }
 
+output "launch_template_id" {
+  description = "ID of the Launch Template"
+  value       = aws_launch_template.webapp.id
+}
+
 output "target_group_arn" {
   description = "ARN of the target group"
   value       = aws_lb_target_group.webapp.arn

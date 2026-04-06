@@ -102,12 +102,6 @@ variable "scale_down_cpu_threshold" {
   default     = 3
 }
 
-variable "db_password" {
-  description = "Master password for RDS instance"
-  type        = string
-  sensitive   = true
-}
-
 variable "db_instance_class" {
   description = "RDS instance class"
   type        = string
@@ -126,6 +120,11 @@ variable "subdomain_prefix" {
 
 variable "route53_zone_id" {
   description = "Route 53 hosted zone ID for the subdomain"
+  type        = string
+}
+
+variable "certificate_arn" {
+  description = "ACM certificate ARN for HTTPS listener"
   type        = string
 }
 

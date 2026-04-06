@@ -182,6 +182,23 @@ GitHub Actions automatically runs on every pull request:
 
 Pull requests can only be merged after all checks pass.
 
+## SSL Certificate Import (DEMO Environment)
+
+The demo environment uses a third-party SSL certificate (ZeroSSL) imported into AWS Certificate Manager.
+
+### Import Command
+
+```bash
+aws acm import-certificate \
+   --certificate fileb://certificate.crt \
+   --private-key fileb://demo.dbaa.me.key \
+   --certificate-chain fileb://ca_bundle.crt \
+   --profile demo \
+   --region us-east-1
+```
+
+The certificate ARN returned by this command must be set in `terraform.tfvars` as `certificate_arn`.
+
 ---
 
 ## 📚 Additional Resources

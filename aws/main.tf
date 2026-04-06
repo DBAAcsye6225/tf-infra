@@ -97,6 +97,213 @@ data "aws_ami" "webapp" {
     values = ["available"]
   }
 }
+data "aws_caller_identity" "current" {}
+
+locals {
+  account_root_arn                    = "arn:aws:iam::${data.aws_caller_identity.current.account_id}:root"
+  autoscaling_service_linked_role_arn = "arn:aws:iam::${data.aws_caller_identity.current.account_id}:role/aws-service-role/autoscaling.amazonaws.com/AWSServiceRoleForAutoScaling"
+}
+
+resource "aws_kms_key" "ec2" {
+  description             = "KMS key for ${var.vpc_name} EC2 EBS encryption"
+  enable_key_rotation     = true
+  rotation_period_in_days = 90
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Sid    = "AllowRootAccountAccess"
+        Effect = "Allow"
+        Principal = {
+          AWS = local.account_root_arn
+        }
+        Action   = "kms:*"
+        Resource = "*"
+      },
+      {
+        Sid    = "AllowEBSUse"
+        Effect = "Allow"
+        Principal = {
+          Service = ["ec2.amazonaws.com"]
+          AWS     = [local.autoscaling_service_linked_role_arn]
+        }
+        Action = [
+          "kms:CreateGrant",
+          "kms:Encrypt",
+          "kms:Decrypt",
+          "kms:ReEncrypt*",
+          "kms:GenerateDataKey*",
+          "kms:DescribeKey",
+        ]
+        Resource = "*"
+      }
+    ]
+  })
+
+  tags = {
+    Name = "${var.vpc_name}-ec2-kms"
+  }
+}
+
+resource "aws_kms_alias" "ec2" {
+  name          = "alias/${var.vpc_name}-ec2-kms"
+  target_key_id = aws_kms_key.ec2.key_id
+}
+
+resource "aws_kms_key" "rds" {
+  description             = "KMS key for ${var.vpc_name} RDS encryption"
+  enable_key_rotation     = true
+  rotation_period_in_days = 90
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Sid    = "AllowRootAccountAccess"
+        Effect = "Allow"
+        Principal = {
+          AWS = local.account_root_arn
+        }
+        Action   = "kms:*"
+        Resource = "*"
+      },
+      {
+        Sid    = "AllowRDSUse"
+        Effect = "Allow"
+        Principal = {
+          Service = "rds.amazonaws.com"
+        }
+        Action = [
+          "kms:CreateGrant",
+          "kms:Encrypt",
+          "kms:Decrypt",
+          "kms:ReEncrypt*",
+          "kms:GenerateDataKey*",
+          "kms:DescribeKey",
+        ]
+        Resource = "*"
+      }
+    ]
+  })
+
+  tags = {
+    Name = "${var.vpc_name}-rds-kms"
+  }
+}
+
+resource "aws_kms_alias" "rds" {
+  name          = "alias/${var.vpc_name}-rds-kms"
+  target_key_id = aws_kms_key.rds.key_id
+}
+
+resource "aws_kms_key" "s3" {
+  description             = "KMS key for ${var.vpc_name} S3 encryption"
+  enable_key_rotation     = true
+  rotation_period_in_days = 90
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Sid    = "AllowRootAccountAccess"
+        Effect = "Allow"
+        Principal = {
+          AWS = local.account_root_arn
+        }
+        Action   = "kms:*"
+        Resource = "*"
+      },
+      {
+        Sid    = "AllowS3Use"
+        Effect = "Allow"
+        Principal = {
+          Service = "s3.amazonaws.com"
+        }
+        Action = [
+          "kms:CreateGrant",
+          "kms:Encrypt",
+          "kms:Decrypt",
+          "kms:ReEncrypt*",
+          "kms:GenerateDataKey*",
+          "kms:DescribeKey",
+        ]
+        Resource = "*"
+      }
+    ]
+  })
+
+  tags = {
+    Name = "${var.vpc_name}-s3-kms"
+  }
+}
+
+resource "aws_kms_alias" "s3" {
+  name          = "alias/${var.vpc_name}-s3-kms"
+  target_key_id = aws_kms_key.s3.key_id
+}
+
+resource "aws_kms_key" "secrets" {
+  description             = "KMS key for ${var.vpc_name} Secrets Manager encryption"
+  enable_key_rotation     = true
+  rotation_period_in_days = 90
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Sid    = "AllowRootAccountAccess"
+        Effect = "Allow"
+        Principal = {
+          AWS = local.account_root_arn
+        }
+        Action   = "kms:*"
+        Resource = "*"
+      },
+      {
+        Sid    = "AllowSecretsManagerUse"
+        Effect = "Allow"
+        Principal = {
+          Service = "secretsmanager.amazonaws.com"
+        }
+        Action = [
+          "kms:CreateGrant",
+          "kms:Encrypt",
+          "kms:Decrypt",
+          "kms:ReEncrypt*",
+          "kms:GenerateDataKey*",
+          "kms:DescribeKey",
+        ]
+        Resource = "*"
+      }
+    ]
+  })
+
+  tags = {
+    Name = "${var.vpc_name}-secrets-kms"
+  }
+}
+
+resource "aws_kms_alias" "secrets" {
+  name          = "alias/${var.vpc_name}-secrets-kms"
+  target_key_id = aws_kms_key.secrets.key_id
+}
+
+resource "random_password" "db_password" {
+  length           = 24
+  special          = true
+  override_special = "!#$%&*()-_=+[]{}<>:?"
+}
+
+resource "aws_secretsmanager_secret" "db_password" {
+  name       = "${var.vpc_name}-db-password"
+  kms_key_id = aws_kms_key.secrets.arn
+
+  tags = {
+    Name = "${var.vpc_name}-db-password"
+  }
+}
+
+resource "aws_secretsmanager_secret_version" "db_password" {
+  secret_id     = aws_secretsmanager_secret.db_password.id
+  secret_string = random_password.db_password.result
+}
 
 # 10. Load Balancer Security Group
 resource "aws_security_group" "load_balancer" {
@@ -105,19 +312,12 @@ resource "aws_security_group" "load_balancer" {
   vpc_id      = aws_vpc.main.id
 
   ingress {
-    from_port   = 80
-    to_port     = 80
-    protocol    = "tcp"
-    cidr_blocks = ["0.0.0.0/0"]
-    description = "Allow HTTP from anywhere"
-  }
-
-  ingress {
-    from_port   = 443
-    to_port     = 443
-    protocol    = "tcp"
-    cidr_blocks = ["0.0.0.0/0"]
-    description = "Allow HTTPS from anywhere"
+    from_port        = 443
+    to_port          = 443
+    protocol         = "tcp"
+    cidr_blocks      = ["0.0.0.0/0"]
+    ipv6_cidr_blocks = ["::/0"]
+    description      = "Allow HTTPS from anywhere"
   }
 
   egress {
@@ -138,15 +338,6 @@ resource "aws_security_group" "application" {
   name        = "${var.vpc_name}-application-sg"
   description = "Security group for web application instances"
   vpc_id      = aws_vpc.main.id
-
-  # Allow SSH
-  ingress {
-    from_port   = 22
-    to_port     = 22
-    protocol    = "tcp"
-    cidr_blocks = ["0.0.0.0/0"]
-    description = "Allow SSH"
-  }
 
   # Allow app traffic ONLY from Load Balancer SG
   ingress {
@@ -208,11 +399,13 @@ resource "aws_lb_target_group" "webapp" {
   }
 }
 
-# 14. Listener on port 80
-resource "aws_lb_listener" "http" {
+# 14. Listener on port 443
+resource "aws_lb_listener" "https" {
   load_balancer_arn = aws_lb.webapp.arn
-  port              = 80
-  protocol          = "HTTP"
+  port              = 443
+  protocol          = "HTTPS"
+  ssl_policy        = "ELBSecurityPolicy-TLS13-1-2-2021-06"
+  certificate_arn   = var.certificate_arn
 
   default_action {
     type             = "forward"
@@ -244,12 +437,14 @@ resource "aws_launch_template" "webapp" {
   }
 
   block_device_mappings {
-    device_name = "/dev/sda1"
+    device_name = "/dev/xvda"
 
     ebs {
       volume_size           = 25
       volume_type           = "gp2"
       delete_on_termination = true
+      encrypted             = true
+      kms_key_id            = aws_kms_key.ec2.arn
     }
   }
 
@@ -265,15 +460,45 @@ resource "aws_launch_template" "webapp" {
       INSTANCE_ID="unknown-instance"
     fi
 
-    # Configure application environment variables
-    echo "SPRING_DATASOURCE_URL=jdbc:mysql://${aws_db_instance.webapp.address}:3306/csye6225" >> /etc/environment
-    echo "SPRING_DATASOURCE_USERNAME=csye6225" >> /etc/environment
-    echo "SPRING_DATASOURCE_PASSWORD=${var.db_password}" >> /etc/environment
-    echo "S3_BUCKET_NAME=${aws_s3_bucket.webapp.bucket}" >> /etc/environment
-    echo "AWS_REGION=${var.aws_region}" >> /etc/environment
-    echo "APP_LOG_PATH=/var/log/webapp/webapp.log" >> /etc/environment
-    echo "SNS_TOPIC_ARN=${aws_sns_topic.user_verification.arn}" >> /etc/environment
-    echo "JAVA_TOOL_OPTIONS=-Xms128m -Xmx384m" >> /etc/environment
+    # Ensure AWS CLI is available before attempting Secrets Manager calls.
+    if ! command -v aws >/dev/null 2>&1; then
+      sudo apt-get update -y
+      sudo apt-get install -y awscli
+    fi
+
+    # Configure application environment variables (overwrite keys to avoid stale values from AMI)
+    set_env_var() {
+      local key="$1"
+      local value="$2"
+      sudo cp /etc/environment /tmp/environment.new
+      sudo sed -i "/^$${key}=/d" /tmp/environment.new
+      printf "%s=%s\n" "$key" "$value" | sudo tee -a /tmp/environment.new >/dev/null
+      sudo install -m 0644 /tmp/environment.new /etc/environment
+      rm -f /tmp/environment.new
+    }
+
+    DB_PASSWORD=""
+    for i in $(seq 1 30); do
+      DB_PASSWORD=$(aws secretsmanager get-secret-value --secret-id ${aws_secretsmanager_secret.db_password.id} --region ${var.aws_region} --query SecretString --output text 2>/dev/null || true)
+      if [ -n "$DB_PASSWORD" ] && [ "$DB_PASSWORD" != "None" ]; then
+        break
+      fi
+      echo "[WARN] Secrets Manager password fetch failed (attempt $i/30), retrying..."
+      sleep 5
+    done
+    if [ -z "$DB_PASSWORD" ] || [ "$DB_PASSWORD" = "None" ]; then
+      echo "[ERROR] Failed to retrieve DB password from Secrets Manager after retries"
+      exit 1
+    fi
+
+    set_env_var "SPRING_DATASOURCE_URL" "jdbc:mysql://${aws_db_instance.webapp.address}:3306/csye6225"
+    set_env_var "SPRING_DATASOURCE_USERNAME" "csye6225"
+    set_env_var "SPRING_DATASOURCE_PASSWORD" "$DB_PASSWORD"
+    set_env_var "S3_BUCKET_NAME" "${aws_s3_bucket.webapp.bucket}"
+    set_env_var "AWS_REGION" "${var.aws_region}"
+    set_env_var "APP_LOG_PATH" "/var/log/webapp/webapp.log"
+    set_env_var "SNS_TOPIC_ARN" "${aws_sns_topic.user_verification.arn}"
+    set_env_var "JAVA_TOOL_OPTIONS" "-Xms128m -Xmx384m"
     source /etc/environment
 
     # Create CloudWatch Agent configuration directory
@@ -354,7 +579,7 @@ resource "aws_autoscaling_group" "webapp" {
   desired_capacity          = 1
   default_cooldown          = var.asg_cooldown
   health_check_type         = "ELB"
-  health_check_grace_period = 300
+  health_check_grace_period = 1200
   vpc_zone_identifier       = aws_subnet.public[*].id
 
   launch_template {
@@ -469,7 +694,8 @@ resource "aws_s3_bucket_server_side_encryption_configuration" "webapp" {
 
   rule {
     apply_server_side_encryption_by_default {
-      sse_algorithm = "AES256"
+      sse_algorithm     = "aws:kms"
+      kms_master_key_id = aws_kms_key.s3.arn
     }
   }
 }
@@ -550,10 +776,12 @@ resource "aws_db_instance" "webapp" {
 
   allocated_storage = 20
   storage_type      = "gp2"
+  storage_encrypted = true
+  kms_key_id        = aws_kms_key.rds.arn
 
   db_name  = "csye6225"
   username = "csye6225"
-  password = var.db_password
+  password = random_password.db_password.result
 
   multi_az            = false
   publicly_accessible = false
@@ -675,6 +903,43 @@ resource "aws_dynamodb_table" "email_tracking" {
   tags = {
     Name = "${var.vpc_name}-email-tracking"
   }
+}
+
+resource "aws_iam_role_policy" "ec2_secrets_read" {
+  name = "ec2-secrets-read"
+  role = aws_iam_role.ec2_role.id
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Effect   = "Allow"
+        Action   = ["secretsmanager:GetSecretValue"]
+        Resource = aws_secretsmanager_secret.db_password.arn
+      },
+      {
+        Effect   = "Allow"
+        Action   = ["kms:Decrypt"]
+        Resource = aws_kms_key.secrets.arn
+      }
+    ]
+  })
+}
+
+resource "aws_iam_role_policy" "ec2_kms_s3" {
+  name = "ec2-kms-s3"
+  role = aws_iam_role.ec2_role.id
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Effect   = "Allow"
+        Action   = ["kms:Decrypt", "kms:GenerateDataKey*"]
+        Resource = aws_kms_key.s3.arn
+      }
+    ]
+  })
 }
 
 resource "aws_sns_topic" "user_verification" {
