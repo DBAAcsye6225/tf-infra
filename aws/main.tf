@@ -574,9 +574,9 @@ resource "aws_launch_template" "webapp" {
 # 16. Auto Scaling Group
 resource "aws_autoscaling_group" "webapp" {
   name                      = "${var.vpc_name}-asg"
-  min_size                  = 1
-  max_size                  = 1
-  desired_capacity          = 1
+  min_size                  = 3
+  max_size                  = 5
+  desired_capacity          = 3
   default_cooldown          = var.asg_cooldown
   health_check_type         = "ELB"
   health_check_grace_period = 1200
@@ -631,8 +631,8 @@ resource "aws_cloudwatch_metric_alarm" "high_cpu" {
   namespace           = "AWS/EC2"
   period              = 60
   statistic           = "Average"
-  threshold           = 90
-  alarm_description   = "Scale up when CPU > 90% for 2 periods"
+  threshold           = 5
+  alarm_description   = "Scale up when CPU > 5% for 2 periods"
   alarm_actions       = [aws_autoscaling_policy.scale_up.arn]
 
   dimensions = {
@@ -649,8 +649,8 @@ resource "aws_cloudwatch_metric_alarm" "low_cpu" {
   namespace           = "AWS/EC2"
   period              = 60
   statistic           = "Average"
-  threshold           = var.scale_down_cpu_threshold
-  alarm_description   = "Scale down when CPU < ${var.scale_down_cpu_threshold}%"
+  threshold           = 3
+  alarm_description   = "Scale down when CPU < 3%"
   alarm_actions       = [aws_autoscaling_policy.scale_down.arn]
 
   dimensions = {
